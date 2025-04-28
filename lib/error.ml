@@ -1,19 +1,15 @@
-type code_position = {
-  line: int;
-  col: int
-}
-
 type warning =
-| IntOutOfRange of code_position * string
-| UnknownEscape of code_position * string
+| OctalOutOfRange of int * string
+| DecimalOutOfRange of int * string
+| UnknownEscape of int * string
 
 type error =
-| InvalidChar of code_position * string
-| InvalidOctal of code_position * string
-| MultilineString of code_position
-| StringNotClosed of code_position
-| UnknownOperator of code_position * string
-| VarNumberStart of code_position * string
+| InvalidChar of int
+| InvalidOctal of int
+| StringNotClosed of int
+| UnknownToken of int * char
+| UnknownOperator of int * string
+| VarNumberStart of int
 
 type error_state = {
   mutable warnings: warning list;
