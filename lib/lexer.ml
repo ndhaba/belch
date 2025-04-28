@@ -192,7 +192,67 @@ let lex_string str i errs : ptoken * int =
   (* Return the token *)
   (i, STRING (Buffer.contents buffer)), !index
 
-let lex_char str i errs : ptoken * int = Obj.magic ()
+(** [lex_char str i errs] lexes the current position in [str] as a char. If
+    the char is not completed, or if it's too big, an error will be added to
+    [errs] *)
+let lex_char str i errs : ptoken * int =
+  (* Initial loop variables *)
+  let slen = String.length str in
+  let buffer = Buffer.create 128 in
+  let continue = ref true in
+  let escape = ref false in
+  let index = ref (i + 1) in
+  (* Start parsing the string *)
+  while !continue && !index < slen do
+    match String.unsafe_get str !index with
+    (* Escape characters *)
+    | '*' when not !escape ->
+      escape := true
+    | '*' | '"' | '\'' as c when !escape ->
+      Buffer.add_char buffer c;
+      escape := false
+    | '0' when !escape ->
+      Buffer.add_char buffer '\x00';
+      escape := false
+    | '(' when !escape ->
+      Buffer.add_char buffer '{';
+      escape := false
+    | ')' when !escape ->
+      Buffer.add_char buffer '}';
+      escape := false
+    | 't' when !escape ->
+      Buffer.add_char buffer '\t';
+      escape := false
+    | 'n' when !escape ->
+      Buffer.add_char buffer '\n';
+      escape := false
+    (* Unknown escape character *)
+    | c when !escape ->
+      warn errs (UnknownEscape (!index - 1, "*" ^ String.make 1 c));
+      Buffer.add_char buffer c;
+      escape := false
+    (* Terminating characters *)
+    | '\'' ->
+      continue := false
+    | '\n' ->
+      error errs (StringNotClosed i);
+      continue := false
+    (* All other characters *)
+    | c ->
+      Buffer.add_char buffer c;
+    (* Increment the index *)
+    index := !index + 1
+  done;
+  (* If the string did not terminate, then the string isn't closed *)
+  let bytes = Buffer.to_bytes buffer in
+  if !continue then
+    error errs (StringNotClosed i)
+  else if Bytes.length bytes > 8 then
+    warn errs (CharTooBig i)
+  else
+    ();
+  (* Return the token *)
+  (i, CHAR bytes), !index
 
 (** [lex_name str i errs] lexes the current position in [str] as a name or
     number. *)
@@ -289,17 +349,23 @@ let lex str =
       | ':' -> lex_raw (i + 1) ((i, COLON) :: acc)
       (* String *)
       | '"' ->
-          let token, i = lex_string str i errs in
-          lex_raw i (token :: acc)
+        let token, i = lex_string str i errs in
+        lex_raw i (token :: acc)
+      (* Char *)
+      | '\'' ->
+        let token, i = lex_char str i errs in
+        lex_raw i (token :: acc)
       (* Operator *)
       | c when is_operator_char c ->
-          let token, i = lex_operator str i errs in
-          lex_raw i (token :: acc)
+        let token, i = lex_operator str i errs in
+        lex_raw i (token :: acc)
       (* Names/numbers *)
       | c when is_alphanumeric c ->
-          let token, i = lex_name str i errs in
-          lex_raw i (token :: acc)
+        let token, i = lex_name str i errs in
+        lex_raw i (token :: acc)
       (* Everything else *)
-      | _ -> Obj.magic ()
+      | c ->
+        error errs (UnknownToken (i, c));
+        lex_raw (i + 1) acc
   in
   lex_raw 0 []

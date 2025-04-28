@@ -1,10 +1,11 @@
 type warning =
+| CharTooBig of int
 | OctalOutOfRange of int * string
 | DecimalOutOfRange of int * string
 | UnknownEscape of int * string
 
 type error =
-| InvalidChar of int
+| CharNotClosed of int
 | InvalidOctal of int
 | StringNotClosed of int
 | UnknownToken of int * char
