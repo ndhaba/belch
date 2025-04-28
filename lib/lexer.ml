@@ -39,12 +39,9 @@ let is_octal c = c >= '0' && c <= '7'
 (** [is_digit c] is true if the character can be used in a base 10 number *)
 let is_digit c = c >= '0' && c <= '9'
 
-(** [is_variable_start c] is true if [c] can be the start of a variable name *)
-let is_variable_start c =
-  (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c = '_'
-
-(** [is_variable_char c] is true if [c] can be part of a variable name *)
-let is_variable_char c = is_variable_start c || is_digit c
+(** [is_alphanumeric c] is true if [c] can be part of a variable name *)
+let is_alphanumeric c =
+  (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c = '_' || is_digit c
 
 (** [is_operator_char c] is true if [c] can be part of an operator *)
 let is_operator_char = function
@@ -139,14 +136,68 @@ let lex_operator str i errs : ptoken * int =
 
 (** [lex_string str i errs] lexes the current position in [str] as a string. If
     the string is not completed, an error will be added to [errs] *)
-let lex_string str i errs : ptoken * int = Obj.magic ()
+let lex_string str i errs : ptoken * int =
+  (* Initial loop variables *)
+  let slen = String.length str in
+  let buffer = Buffer.create 128 in
+  let continue = ref true in
+  let escape = ref false in
+  let index = ref (i + 1) in
+  (* Start parsing the string *)
+  while !continue && !index < slen do
+    match String.unsafe_get str !index with
+    (* Escape characters *)
+    | '*' when not !escape ->
+      escape := true
+    | '*' | '"' | '\'' as c when !escape ->
+      Buffer.add_char buffer c;
+      escape := false
+    | '0' when !escape ->
+      Buffer.add_char buffer '\x00';
+      escape := false
+    | '(' when !escape ->
+      Buffer.add_char buffer '{';
+      escape := false
+    | ')' when !escape ->
+      Buffer.add_char buffer '}';
+      escape := false
+    | 't' when !escape ->
+      Buffer.add_char buffer '\t';
+      escape := false
+    | 'n' when !escape ->
+      Buffer.add_char buffer '\n';
+      escape := false
+    (* Unknown escape character *)
+    | c when !escape ->
+      warn errs (UnknownEscape (!index - 1, "*" ^ String.make 1 c));
+      Buffer.add_char buffer c;
+      escape := false
+    (* Terminating characters *)
+    | '"' ->
+      continue := false
+    | '\n' ->
+      error errs (StringNotClosed i);
+      continue := false
+    (* All other characters *)
+    | c ->
+      Buffer.add_char buffer c;
+    (* Increment the index *)
+    index := !index + 1
+  done;
+  (* If the string did not terminate, then the string isn't closed *)
+  if !continue then
+    error errs (StringNotClosed i)
+  else
+    ();
+  (* Return the token *)
+  (i, STRING (Buffer.contents buffer)), !index
 
 let lex_char str i errs : ptoken * int = Obj.magic ()
 
-(** [lex_variable str i errs] lexes the current position in [str] as a name or
+(** [lex_name str i errs] lexes the current position in [str] as a name or
     number. *)
-let lex_variable str i errs : ptoken * int =
-  let len = length_while is_variable_char str i in
+let lex_name str i errs : ptoken * int =
+  let len = length_while is_alphanumeric str i in
   let start = String.unsafe_get str i in
   (* Special case: 0 *)
   if start = '0' && len = 1 then
@@ -245,8 +296,8 @@ let lex str =
           let token, i = lex_operator str i errs in
           lex_raw i (token :: acc)
       (* Names/numbers *)
-      | c when is_variable_char c ->
-          let token, i = lex_variable str i errs in
+      | c when is_alphanumeric c ->
+          let token, i = lex_name str i errs in
           lex_raw i (token :: acc)
       (* Everything else *)
       | _ -> Obj.magic ()
