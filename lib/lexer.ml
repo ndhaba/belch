@@ -30,8 +30,10 @@ type token =
   | STRING of string
   | CHAR of bytes
   | NUMBER of int
+[@@deriving show]
 
-type ptoken = int * token
+type point_token = int * token
+[@@deriving show]
 
 (** [is_octal c] is true if the character can be used in a base 8 number *)
 let is_octal c = c >= '0' && c <= '7'
@@ -122,7 +124,7 @@ let length_while f str i =
 
 (** [lex_operator str i errs] lexes the current position in [str] as an
     operator. If this operator is unknown, an error will be added to [errs] *)
-let lex_operator str i errs : ptoken * int =
+let lex_operator str i errs : point_token * int =
   (* Get the full operator *)
   let len = length_while is_operator_char str i in
   let operator = String.sub str i len in
@@ -136,7 +138,7 @@ let lex_operator str i errs : ptoken * int =
 
 (** [lex_string str i errs] lexes the current position in [str] as a string. If
     the string is not completed, an error will be added to [errs] *)
-let lex_string str i errs : ptoken * int =
+let lex_string str i errs : point_token * int =
   (* Initial loop variables *)
   let slen = String.length str in
   let buffer = Buffer.create 128 in
@@ -195,7 +197,7 @@ let lex_string str i errs : ptoken * int =
 (** [lex_char str i errs] lexes the current position in [str] as a char. If
     the char is not completed, or if it's too big, an error will be added to
     [errs] *)
-let lex_char str i errs : ptoken * int =
+let lex_char str i errs : point_token * int =
   (* Initial loop variables *)
   let slen = String.length str in
   let buffer = Buffer.create 128 in
@@ -256,7 +258,7 @@ let lex_char str i errs : ptoken * int =
 
 (** [lex_name str i errs] lexes the current position in [str] as a name or
     number. *)
-let lex_name str i errs : ptoken * int =
+let lex_name str i errs : point_token * int =
   let len = length_while is_alphanumeric str i in
   let start = String.unsafe_get str i in
   (* Special case: 0 *)

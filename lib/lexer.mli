@@ -31,6 +31,10 @@ type token =
   | CHAR of bytes
   | NUMBER of int
 
-type ptoken = int * token
+type point_token = int * token
 
-val lex : string -> ptoken list * error_state
+val lex : string -> point_token list * error_state
+
+val show_token : token -> string
+
+val show_point_token : point_token -> string
