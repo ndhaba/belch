@@ -1,3 +1,5 @@
+[@@@coverage off]
+
 type warning =
 | CharTooBig of int
 | OctalOutOfRange of int * string
@@ -19,9 +21,9 @@ type error_state = {
 
 let error state error = state.errors <- error :: state.errors
 
-let has_error state = List.is_empty state.errors
+let has_error state = not (List.is_empty state.errors)
 
-let has_warning state = List.is_empty state.warnings
+let has_warning state = not (List.is_empty state.warnings)
 
 let iter_errors f state = List.iter f state.errors
 
