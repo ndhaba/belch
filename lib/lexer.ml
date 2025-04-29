@@ -132,7 +132,7 @@ let lex_operator str i errs : point_token * int =
   if is_operator operator then
     ()
   else
-    error errs (UnknownOperator (i, operator));
+    error errs i (UnknownOperator operator);
   (* Return the token *)
   ((i, OPERATOR operator), i + len)
 
@@ -174,7 +174,7 @@ let lex_text_data str i errs closure =
       escape := false
     (* Unknown escape character *)
     | c when !escape ->
-      warn errs (UnknownEscape (!index - 1, "*" ^ String.make 1 c));
+      error errs (!index - 1) (UnknownEscape ("*" ^ String.make 1 c));
       Buffer.add_char buffer c;
       escape := false
     (* Terminating characters *)
@@ -198,7 +198,7 @@ let lex_string str i errs : point_token * int =
   (* Add error if needed *)
   (match state with
   | Valid -> ()
-  | _ -> error errs (StringNotClosed i));
+  | _ -> error errs i StringNotClosed);
   (* Return the token *)
   (i, STRING (Buffer.contents buffer)), index
 
@@ -210,8 +210,8 @@ let lex_char str i errs : point_token * int =
   (* Add error if needed *)
   (match state with
   | Valid when Buffer.length buffer <= 8 -> ()
-  | Valid -> warn errs (CharTooBig i)
-  | _ -> error errs (CharNotClosed i));
+  | Valid -> error errs i CharTooBig
+  | _ -> error errs i CharNotClosed);
   (* Return the token *)
   (i, CHAR (Buffer.to_bytes buffer)), index
 
@@ -232,7 +232,7 @@ let lex_name str i errs : point_token * int =
       if String.for_all is_octal sub then (
         (* Check that the octal number isn't out of bounds *)
         if is_octal_out_of_bounds sub then
-          warn errs (OctalOutOfRange (i, sub))
+          error errs i (OctalOutOfRange sub)
         else
           ();
         (* Return the token *)
@@ -241,13 +241,13 @@ let lex_name str i errs : point_token * int =
       (* If there are normal decimal numbers (8, 9), tell the user its not
          octal form *)
       else if String.for_all is_digit sub then (
-        error errs (InvalidOctal i);
+        error errs i InvalidOctal;
         ((i, NUMBER 0), i + len)
       )
       (* If there are alphabet characters, tell the user you can't start a
          variable with numbers *)
       else (
-        error errs (VarNumberStart i);
+        error errs i VarNumberStart;
         ((i, NAME sub), i + len)
       )
     (* If this is a decimal number *)
@@ -256,7 +256,7 @@ let lex_name str i errs : point_token * int =
       if String.for_all is_digit sub then (
         (* Check that the decimal number isn't out of bounds *)
         if is_decimal_out_of_bounds sub then
-          warn errs (DecimalOutOfRange (i, sub))
+          error errs i (DecimalOutOfRange sub)
         else
           ();
         (* Return the token *)
@@ -265,7 +265,7 @@ let lex_name str i errs : point_token * int =
       (* If there are alphabet characters, tell the user you can't start a
          variable with numbers *)
       else (
-        error errs (VarNumberStart i);
+        error errs i VarNumberStart;
         ((i, NAME sub), i + len)
       )
     (* If this is a name *)
@@ -326,7 +326,7 @@ let lex str =
         lex_raw i (token :: acc)
       (* Everything else *)
       | c ->
-        error errs (UnknownToken (i, c));
+        error errs i (UnknownToken c);
         lex_raw (i + 1) acc
   in
   lex_raw 0 []

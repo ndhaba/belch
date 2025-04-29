@@ -1,37 +1,34 @@
 [@@@coverage off]
 
-type warning =
-| CharTooBig of int
-| OctalOutOfRange of int * string
-| DecimalOutOfRange of int * string
-| UnknownEscape of int * string
+type error_variant =
+| CharNotClosed
+| CharTooBig
+| DecimalOutOfRange of string
+| InvalidOctal
+| OctalOutOfRange of string
+| StringNotClosed
+| UnknownEscape of string
+| UnknownToken of char
+| UnknownOperator of string
+| VarNumberStart
 
-type error =
-| CharNotClosed of int
-| InvalidOctal of int
-| StringNotClosed of int
-| UnknownToken of int * char
-| UnknownOperator of int * string
-| VarNumberStart of int
+type error = int * error_variant
+
+module ErrorSet = Set.Make (struct
+  type t = error
+  let compare (l1, _) (l2, _) = l1 - l2
+end)
 
 type error_state = {
-  mutable warnings: warning list;
-  mutable errors: error list
+  mutable errors: ErrorSet.t
 }
 
-let error state error = state.errors <- error :: state.errors
+let error state i error = state.errors <- ErrorSet.add (i, error) state.errors
 
-let has_error state = not (List.is_empty state.errors)
+let errors state = ErrorSet.elements state.errors
 
-let has_warning state = not (List.is_empty state.warnings)
-
-let iter_errors f state = List.iter f state.errors
-
-let iter_warnings f state = List.iter f state.warnings
+let has_error state = not (ErrorSet.is_empty state.errors)
 
 let new_error_state () = {
-  warnings = [];
-  errors = []
+  errors = ErrorSet.empty
 }
-
-let warn state warning = state.warnings <- warning :: state.warnings
