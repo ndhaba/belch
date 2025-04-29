@@ -136,17 +136,20 @@ let lex_operator str i errs : point_token * int =
   (* Return the token *)
   ((i, OPERATOR operator), i + len)
 
-(** [lex_string str i errs] lexes the current position in [str] as a string. If
-    the string is not completed, an error will be added to [errs] *)
-let lex_string str i errs : point_token * int =
+(* A type representing the state of [lex_text_data] *)
+type text_state = Valid | NotClosed | Incomplete
+
+(** [lex_text_data str i errs closure] lexes the current position in [str] as
+    a string-like token, with the given [closure] character surrounding it *)
+let lex_text_data str i errs closure =
   (* Initial loop variables *)
   let slen = String.length str in
   let buffer = Buffer.create 128 in
-  let continue = ref true in
+  let state = ref Incomplete in
   let escape = ref false in
   let index = ref (i + 1) in
   (* Start parsing the string *)
-  while !continue && !index < slen do
+  while !state = Incomplete && !index < slen do
     match String.unsafe_get str !index with
     (* Escape characters *)
     | '*' when not !escape ->
@@ -175,86 +178,42 @@ let lex_string str i errs : point_token * int =
       Buffer.add_char buffer c;
       escape := false
     (* Terminating characters *)
-    | '"' ->
-      continue := false
+    | c when c = closure ->
+      state := Valid
     | '\n' ->
-      error errs (StringNotClosed i);
-      continue := false
+      state := NotClosed
     (* All other characters *)
     | c ->
       Buffer.add_char buffer c;
     (* Increment the index *)
     index := !index + 1
   done;
-  (* If the string did not terminate, then the string isn't closed *)
-  if !continue then
-    error errs (StringNotClosed i)
-  else
-    ();
+  (* Return buffer + state *)
+  buffer, !state, !index
+
+(** [lex_string str i errs] lexes the current position in [str] as a string. If
+    the string is not completed, an error will be added to [errs] *)
+let lex_string str i errs : point_token * int =
+  let buffer, state, index = lex_text_data str i errs '"' in
+  (* Add error if needed *)
+  (match state with
+  | Valid -> ()
+  | _ -> error errs (StringNotClosed i));
   (* Return the token *)
-  (i, STRING (Buffer.contents buffer)), !index
+  (i, STRING (Buffer.contents buffer)), index
 
 (** [lex_char str i errs] lexes the current position in [str] as a char. If
     the char is not completed, or if it's too big, an error will be added to
     [errs] *)
 let lex_char str i errs : point_token * int =
-  (* Initial loop variables *)
-  let slen = String.length str in
-  let buffer = Buffer.create 128 in
-  let continue = ref true in
-  let escape = ref false in
-  let index = ref (i + 1) in
-  (* Start parsing the string *)
-  while !continue && !index < slen do
-    match String.unsafe_get str !index with
-    (* Escape characters *)
-    | '*' when not !escape ->
-      escape := true
-    | '*' | '"' | '\'' as c when !escape ->
-      Buffer.add_char buffer c;
-      escape := false
-    | '0' when !escape ->
-      Buffer.add_char buffer '\x00';
-      escape := false
-    | '(' when !escape ->
-      Buffer.add_char buffer '{';
-      escape := false
-    | ')' when !escape ->
-      Buffer.add_char buffer '}';
-      escape := false
-    | 't' when !escape ->
-      Buffer.add_char buffer '\t';
-      escape := false
-    | 'n' when !escape ->
-      Buffer.add_char buffer '\n';
-      escape := false
-    (* Unknown escape character *)
-    | c when !escape ->
-      warn errs (UnknownEscape (!index - 1, "*" ^ String.make 1 c));
-      Buffer.add_char buffer c;
-      escape := false
-    (* Terminating characters *)
-    | '\'' ->
-      continue := false
-    | '\n' ->
-      error errs (StringNotClosed i);
-      continue := false
-    (* All other characters *)
-    | c ->
-      Buffer.add_char buffer c;
-    (* Increment the index *)
-    index := !index + 1
-  done;
-  (* If the string did not terminate, then the string isn't closed *)
-  let bytes = Buffer.to_bytes buffer in
-  if !continue then
-    error errs (StringNotClosed i)
-  else if Bytes.length bytes > 8 then
-    warn errs (CharTooBig i)
-  else
-    ();
+  let buffer, state, index = lex_text_data str i errs '\'' in
+  (* Add error if needed *)
+  (match state with
+  | Valid when Buffer.length buffer <= 8 -> ()
+  | Valid -> warn errs (CharTooBig i)
+  | _ -> error errs (CharNotClosed i));
   (* Return the token *)
-  (i, CHAR bytes), !index
+  (i, CHAR (Buffer.to_bytes buffer)), index
 
 (** [lex_name str i errs] lexes the current position in [str] as a name or
     number. *)
