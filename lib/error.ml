@@ -11,8 +11,10 @@ type error_variant =
 | UnknownToken of char
 | UnknownOperator of string
 | VarNumberStart
+[@@deriving show]
 
 type error = int * error_variant
+[@@deriving show]
 
 module ErrorSet = Set.Make (struct
   type t = error

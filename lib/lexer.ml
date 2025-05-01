@@ -29,7 +29,7 @@ type token =
   | NAME of string
   | STRING of string
   | CHAR of bytes
-  | NUMBER of int
+  | NUMBER of int64
 [@@deriving show]
 
 type point_token = int * token
@@ -72,41 +72,46 @@ let is_operator =
   (* Check if [s] is in the list *)
   in fun s -> List.mem s operators
 
-(** [is_octal_out_of_bounds num] is true if [num] cannot be stored in a 64-bit
-    signed integer *)
-let is_octal_out_of_bounds =
-  let max = "377777777777777777777" in
-  let maxlen = String.length max in
-  fun num ->
-    let len = String.length num in
-    if len = maxlen then
-      num > max
-    else
-      len > maxlen
+let int_zero_char = int_of_char '0'
 
-(* [is_decimal_out_of_bounds num] is true if [num] cannot be stored in a 64-bit
-   signed integer *)
-let is_decimal_out_of_bounds =
-  let max = string_of_int Int.max_int in
-  let maxlen = String.length max in
-  fun num ->
-    let len = String.length num in
-    if len = maxlen then
-      num > max
-    else
-      len > maxlen
+(** [int64_of_string_overflow radix s] parses a string as an [Int64] in base-[radix].
+    Along with the final number, it returns a boolean that is [true] if the number
+    overflows. Raises: [Failure] if an invalid character appears in [s] **)
+let int64_of_string_overflow radix =
+  let open Int64 in
 
-(** [int_of_octal str] is an integer value decoded from [str] *)
-let int_of_octal str =
-  let slen = String.length str in
-  let zero = int_of_char '0' in
-  let rec aux i acc =
-    if i >= slen then
-      acc
-    else
-      aux (i + 1) (Int.shift_left acc 3 + (int_of_char str.[i] - zero))
-  in
-  aux 0 0
+  let max_div = div max_int radix in
+  let max_mod = rem max_int radix in
+  let min_div = div min_int radix in
+  let min_mod = abs (rem min_int radix) in
+  
+  fun s ->
+    let len = String.length s in
+    let is_negative = len > 0 && s.[0] = '-' in
+    let start_idx = if is_negative || (len > 0 && s.[0] = '+') then 1 else 0 in
+
+    let rec loop i acc overflow =
+      if i >= len then
+        (acc, overflow)
+      else
+        let digit = of_int (Char.code s.[i] - int_zero_char) in
+        if digit < 0L || digit >= radix then
+          failwith "int64_of_string_overflow" [@coverage off]
+        else if is_negative then
+          let acc' = sub (mul acc radix) digit in
+          let will_overflow = acc < min_div || (acc = min_div && digit > min_mod) in
+          loop (i + 1) acc' (overflow || will_overflow)
+        else
+          let acc' = add (mul acc radix) digit in
+          let will_overflow = acc > max_div || (acc = max_div && digit > max_mod) in
+          loop (i + 1) acc' (overflow || will_overflow)
+    in
+
+    if start_idx >= len then (0L, true)  (* empty or sign-only string *)
+    else loop start_idx 0L false
+
+let int64_of_octal = int64_of_string_overflow 8L
+let int64_of_decimal = int64_of_string_overflow 10L
 
 (** [length_while f str i] is the length of the substring of [str] starting at
     [i] where [f] is true *)
@@ -215,77 +220,88 @@ let lex_char str i errs : point_token * int =
   (* Return the token *)
   (i, CHAR (Buffer.to_bytes buffer)), index
 
-(** [lex_name str i errs] lexes the current position in [str] as a name or
-    number. *)
-let lex_name str i errs : point_token * int =
-  let len = length_while is_alphanumeric str i in
-  let start = String.unsafe_get str i in
+(** [lex_number str i errs signed] lexes the current position in [str] as a
+    number. If the number is malformed, or if it's out of bounds, an error
+    will be added to [errs] *)
+let lex_number str i errs signed : point_token * int =
+  let start_index = if signed then i + 1 else i in
+  let len = length_while is_alphanumeric str start_index in
+  let start = String.unsafe_get str start_index in
   (* Special case: 0 *)
   if start = '0' && len = 1 then
-    ((i, NUMBER 0), i + 1)
+    ((i, NUMBER 0L), start_index + 1)
   (* Everything else *)
   else
-    let sub = String.sub str i len in
+    let sub = String.sub str i (if signed then len + 1 else len) in
+    let numerical_part = String.sub str start_index len in
     (* If this is an octal number *)
     if start = '0' then
       (* Check that every character is valid *)
-      if String.for_all is_octal sub then (
+      if String.for_all is_octal numerical_part then (
+        (* Parse the octal number *)
+        let num, overflow = int64_of_octal sub in
         (* Check that the octal number isn't out of bounds *)
-        if is_octal_out_of_bounds sub then
+        if overflow then
           error errs i (OctalOutOfRange sub)
         else
           ();
         (* Return the token *)
-        ((i, NUMBER (int_of_octal sub)), i + len)
+        ((i, NUMBER num), start_index + len)
       )
       (* If there are normal decimal numbers (8, 9), tell the user its not
          octal form *)
-      else if String.for_all is_digit sub then (
+      else if String.for_all is_digit numerical_part then (
         error errs i InvalidOctal;
-        ((i, NUMBER 0), i + len)
+        ((i, NUMBER 0L), start_index + len)
       )
       (* If there are alphabet characters, tell the user you can't start a
          variable with numbers *)
       else (
         error errs i VarNumberStart;
-        ((i, NAME sub), i + len)
+        ((i, NAME sub), start_index + len)
       )
     (* If this is a decimal number *)
-    else if is_digit start then
+    else
       (* Check that all of the characters are valid *)
-      if String.for_all is_digit sub then (
+      if String.for_all is_digit numerical_part then (
+        (* Parse the decimal number *)
+        let num, overflow = int64_of_decimal sub in
         (* Check that the decimal number isn't out of bounds *)
-        if is_decimal_out_of_bounds sub then
+        if overflow then
           error errs i (DecimalOutOfRange sub)
         else
           ();
         (* Return the token *)
-        ((i, NUMBER (int_of_string sub)), i + len)
+        ((i, NUMBER num), start_index + len)
       )
       (* If there are alphabet characters, tell the user you can't start a
          variable with numbers *)
       else (
         error errs i VarNumberStart;
-        ((i, NAME sub), i + len)
+        ((i, NAME sub), start_index + len)
       )
-    (* If this is a name *)
-    else
-      let token =
-        match sub with
-        | "if" -> IF
-        | "else" -> ELSE
-        | "while" -> WHILE
-        | "switch" -> SWITCH
-        | "case" -> CASE
-        | "default" -> DEFAULT
-        | "goto" -> GOTO
-        | "break" -> BREAK
-        | "return" -> RETURN
-        | "extrn" -> EXTRN
-        | "auto" -> AUTO
-        | name -> NAME name
-      in
-      ((i, token), i + len)
+
+(** [lex_name str i] lexes the current position in [str] as a name or
+    number. *)
+let lex_name str i : point_token * int =
+  let len = length_while is_alphanumeric str i in
+  let sub = String.sub str i len in
+  let token =
+    match sub with
+    | "if" -> IF
+    | "else" -> ELSE
+    | "while" -> WHILE
+    | "switch" -> SWITCH
+    | "case" -> CASE
+    | "default" -> DEFAULT
+    | "goto" -> GOTO
+    | "break" -> BREAK
+    | "return" -> RETURN
+    | "extrn" -> EXTRN
+    | "auto" -> AUTO
+    | name -> NAME name
+  in
+  ((i, token), i + len)
 
 let lex str =
   let errs = new_error_state () in
@@ -316,13 +332,20 @@ let lex str =
       | '\'' ->
         let token, i = lex_char str i errs in
         lex_raw i (token :: acc)
+      (* Numbers *)
+      | '+' | '-' when slen > i + 1 && is_digit (str.[i + 1]) ->
+        let token, i = lex_number str i errs true in
+        lex_raw i (token :: acc)
+      | c when is_digit c ->
+        let token, i = lex_number str i errs false in
+        lex_raw i (token :: acc)
+      (* Names *)
+      | c when is_alphanumeric c ->
+        let token, i = lex_name str i in
+        lex_raw i (token :: acc)
       (* Operator *)
       | c when is_operator_char c ->
         let token, i = lex_operator str i errs in
-        lex_raw i (token :: acc)
-      (* Names/numbers *)
-      | c when is_alphanumeric c ->
-        let token, i = lex_name str i errs in
         lex_raw i (token :: acc)
       (* Everything else *)
       | c ->

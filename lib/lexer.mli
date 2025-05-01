@@ -29,7 +29,7 @@ type token =
   | NAME of string
   | STRING of string
   | CHAR of bytes
-  | NUMBER of int
+  | NUMBER of int64
 
 type point_token = int * token
 

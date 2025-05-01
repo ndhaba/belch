@@ -12,7 +12,15 @@ let clean_lex expected actual =
     else
       assert_equal expected output ~printer:(string_of_list show_point_token)
 
-let tests = "Lexer" >::: [
+let lex_error expected actual =
+  "Lex error output of \"" ^ actual ^ "\"" >:: fun _ ->
+    let output, errors = lex actual in
+    if Error.has_error errors then
+      assert_equal expected (Error.errors errors) ~printer:(string_of_list Error.show_error)
+    else
+      assert_failure "No errors, lexed successfully"
+
+let tests = "Lexer" >::: let open Error in [
   (* Symbols and whitespace *)
   clean_lex [(0, LBRACE); (2, RBRACE)] "{ }";
   clean_lex [(0, LBRACKET); (2, RBRACKET)] "[\t]";
@@ -28,5 +36,19 @@ let tests = "Lexer" >::: [
   (* Names *)
   clean_lex [(0, GOTO); (5, NAME "madethisup")] "goto madethisup";
   clean_lex [(0, NAME "ifelse")] "ifelse";
-  clean_lex [(0, NAME "extrn_auto")] "extrn_auto"
+  clean_lex [(2, NAME "extrn_auto")] "  extrn_auto";
+  lex_error [(6, VarNumberStart)] "      400atbeginning";
+  lex_error [(4, VarNumberStart)] "    0777777a";
+  (* Numbers *)
+  clean_lex [(0, NUMBER 0L)] "0";
+  clean_lex [(0, NUMBER 143682759L)] "143682759 ";
+  clean_lex [(3, NUMBER (-1234L))] "   -1234";
+  clean_lex [(0, NUMBER 24L)] "+24";
+  clean_lex [(0, NUMBER (Int64.max_int))] "9223372036854775807";
+  clean_lex [(0, NUMBER (Int64.min_int))] "-9223372036854775808";
+  lex_error [(0, DecimalOutOfRange "9223372036854775808")] "9223372036854775808";
+  lex_error [(0, DecimalOutOfRange "-9223372036854775809")] "-9223372036854775809";
+  clean_lex [(0, NUMBER 15L)] "017";
+  clean_lex [(0, NUMBER 342391L)] "01234567";
+  clean_lex [(0, NUMBER 17L)] "00000000000000000000000000000000021";
 ]
