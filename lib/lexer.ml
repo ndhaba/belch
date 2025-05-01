@@ -57,6 +57,9 @@ let is_operator_char = function
   | '|' -> true
   | '!' -> true
   | '=' -> true
+  | '~' -> true
+  | '%' -> true
+  | '^' -> true
   | _ -> false
 
 (* [is_operator s] is true if [s] is a valid operator *)
@@ -64,7 +67,7 @@ let is_operator =
   (* List of every single possible operator *)
   let operators = [
     "*"; "&"; "-"; "!"; "++"; "--"; "~"; "/"; "%"; "+";
-    "-"; "<<"; ">>"; "<"; "<="; ">"; ">="; "=="; "!=";
+    "<<"; ">>"; "<"; "<="; ">"; ">="; "=="; "!="; "^";
     "|"; "=*"; "=/"; "=%"; "=+"; "=-"; "=<<"; "=>>";
     "=<"; "=<="; "=>"; "=>="; "==="; "=!="; "=&"; "=^";
     "=|"
@@ -223,21 +226,19 @@ let lex_char str i errs : point_token * int =
 (** [lex_number str i errs signed] lexes the current position in [str] as a
     number. If the number is malformed, or if it's out of bounds, an error
     will be added to [errs] *)
-let lex_number str i errs signed : point_token * int =
-  let start_index = if signed then i + 1 else i in
-  let len = length_while is_alphanumeric str start_index in
-  let start = String.unsafe_get str start_index in
+let lex_number str i errs : point_token * int =
+  let len = length_while is_alphanumeric str i in
+  let start = String.unsafe_get str i in
   (* Special case: 0 *)
   if start = '0' && len = 1 then
-    ((i, NUMBER 0L), start_index + 1)
+    ((i, NUMBER 0L), i + 1)
   (* Everything else *)
   else
-    let sub = String.sub str i (if signed then len + 1 else len) in
-    let numerical_part = String.sub str start_index len in
+    let sub = String.sub str i len in
     (* If this is an octal number *)
     if start = '0' then
       (* Check that every character is valid *)
-      if String.for_all is_octal numerical_part then (
+      if String.for_all is_octal sub then (
         (* Parse the octal number *)
         let num, overflow = int64_of_octal sub in
         (* Check that the octal number isn't out of bounds *)
@@ -246,24 +247,24 @@ let lex_number str i errs signed : point_token * int =
         else
           ();
         (* Return the token *)
-        ((i, NUMBER num), start_index + len)
+        ((i, NUMBER num), i + len)
       )
       (* If there are normal decimal numbers (8, 9), tell the user its not
          octal form *)
-      else if String.for_all is_digit numerical_part then (
+      else if String.for_all is_digit sub then (
         error errs i InvalidOctal;
-        ((i, NUMBER 0L), start_index + len)
+        ((i, NUMBER 0L), i + len)
       )
       (* If there are alphabet characters, tell the user you can't start a
          variable with numbers *)
       else (
         error errs i VarNumberStart;
-        ((i, NAME sub), start_index + len)
+        ((i, NAME sub), i + len)
       )
     (* If this is a decimal number *)
     else
       (* Check that all of the characters are valid *)
-      if String.for_all is_digit numerical_part then (
+      if String.for_all is_digit sub then (
         (* Parse the decimal number *)
         let num, overflow = int64_of_decimal sub in
         (* Check that the decimal number isn't out of bounds *)
@@ -272,13 +273,13 @@ let lex_number str i errs signed : point_token * int =
         else
           ();
         (* Return the token *)
-        ((i, NUMBER num), start_index + len)
+        ((i, NUMBER num), i + len)
       )
       (* If there are alphabet characters, tell the user you can't start a
          variable with numbers *)
       else (
         error errs i VarNumberStart;
-        ((i, NAME sub), start_index + len)
+        ((i, NAME sub), i + len)
       )
 
 (** [lex_name str i] lexes the current position in [str] as a name or
@@ -333,11 +334,8 @@ let lex str =
         let token, i = lex_char str i errs in
         lex_raw i (token :: acc)
       (* Numbers *)
-      | '+' | '-' when slen > i + 1 && is_digit (str.[i + 1]) ->
-        let token, i = lex_number str i errs true in
-        lex_raw i (token :: acc)
       | c when is_digit c ->
-        let token, i = lex_number str i errs false in
+        let token, i = lex_number str i errs in
         lex_raw i (token :: acc)
       (* Names *)
       | c when is_alphanumeric c ->

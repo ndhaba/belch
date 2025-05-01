@@ -20,6 +20,8 @@ let lex_error expected actual =
     else
       assert_failure "No errors, lexed successfully"
 
+let op l n = (l, Lexer.OPERATOR n)
+
 let tests = "Lexer" >::: let open Error in [
   (* Symbols and whitespace *)
   clean_lex [(0, LBRACE); (2, RBRACE)] "{ }";
@@ -42,13 +44,25 @@ let tests = "Lexer" >::: let open Error in [
   (* Numbers *)
   clean_lex [(0, NUMBER 0L)] "0";
   clean_lex [(0, NUMBER 143682759L)] "143682759 ";
-  clean_lex [(3, NUMBER (-1234L))] "   -1234";
-  clean_lex [(0, NUMBER 24L)] "+24";
+  clean_lex [(0, NUMBER 24L)] "24";
   clean_lex [(0, NUMBER (Int64.max_int))] "9223372036854775807";
-  clean_lex [(0, NUMBER (Int64.min_int))] "-9223372036854775808";
   lex_error [(0, DecimalOutOfRange "9223372036854775808")] "9223372036854775808";
-  lex_error [(0, DecimalOutOfRange "-9223372036854775809")] "-9223372036854775809";
   clean_lex [(0, NUMBER 15L)] "017";
   clean_lex [(0, NUMBER 342391L)] "01234567";
   clean_lex [(0, NUMBER 17L)] "00000000000000000000000000000000021";
+  clean_lex [(0, NUMBER (Int64.max_int))] "0777777777777777777777";
+  lex_error [(0, OctalOutOfRange "01000000000000000000000")] "01000000000000000000000";
+  (* Operators *)
+  clean_lex [op 0 "+"; op 2 "-"; op 4 "|"] "+ - |";
+  clean_lex [op 0 "++"; op 3 "--"] "++ --";
+  clean_lex [op 0 "*"; op 2 "/"; op 4 "^"] "* / ^";
+  clean_lex [op 0 "&"; op 2 "!"; op 4 "~"] "& ! ~";
+  clean_lex [op 0 "%"; op 2 "<"; op 4 ">"] "% < >";
+  clean_lex [op 0 "<="; op 3 ">="] "<= >=";
+  clean_lex [op 0 "<<"; op 3 ">>"; op 6 "=<<"; op 10 "=>>"] "<< >> =<< =>>";
+  clean_lex [op 0 "=="; op 3 "!="; op 6 "=<="] "== != =<=";
+  clean_lex [op 0 "=+"; op 3 "=-"; op 6 "=>="] "=+ =- =>=";
+  clean_lex [op 0 "=*"; op 3 "=/"; op 6 "=!="] "=* =/ =!=";
+  clean_lex [op 0 "=%"; op 3 "=|"; op 6 "==="] "=% =| ===";
+  clean_lex [op 0 "=^"; op 3 "=<"; op 6 "=>"] "=^ =< =>";
 ]
