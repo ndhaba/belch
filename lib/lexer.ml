@@ -133,7 +133,7 @@ let length_while f str i =
 
 (** [lex_operator str i errs] lexes the current position in [str] as an
     operator. If this operator is unknown, an error will be added to [errs] *)
-let lex_operator str i errs : point_token * int =
+let lex_operator str i errs =
   (* Get the full operator *)
   let len = length_while is_operator_char str i in
   let operator = String.sub str i len in
@@ -206,7 +206,7 @@ let lex_text_data str i errs closure =
 
 (** [lex_string str i errs] lexes the current position in [str] as a string. If
     the string is not completed, an error will be added to [errs] *)
-let lex_string str i errs : point_token * int =
+let lex_string str i errs =
   let buffer, state, index = lex_text_data str i errs '"' in
   (* Add error if needed *)
   (match state with
@@ -218,7 +218,7 @@ let lex_string str i errs : point_token * int =
 (** [lex_char str i errs] lexes the current position in [str] as a char. If
     the char is not completed, or if it's too big, an error will be added to
     [errs] *)
-let lex_char str i errs : point_token * int =
+let lex_char str i errs =
   let buffer, state, index = lex_text_data str i errs '\'' in
   (* Add error if needed *)
   (match state with
@@ -231,7 +231,7 @@ let lex_char str i errs : point_token * int =
 (** [lex_number str i errs signed] lexes the current position in [str] as a
     number. If the number is malformed, or if it's out of bounds, an error
     will be added to [errs] *)
-let lex_number str i errs : point_token * int =
+let lex_number str i errs =
   let len = length_while is_alphanumeric str i in
   let start = String.unsafe_get str i in
   (* Special case: 0 *)
@@ -289,7 +289,7 @@ let lex_number str i errs : point_token * int =
 
 (** [lex_name str i] lexes the current position in [str] as a name or
     number. *)
-let lex_name str i : point_token * int =
+let lex_name str i =
   let len = length_while is_alphanumeric str i in
   let sub = String.sub str i len in
   let token =
