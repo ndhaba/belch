@@ -20,6 +20,16 @@ let lex_error expected actual =
     else
       assert_failure "No errors, lexed successfully"
 
+let string_lex expected actual =
+  "String lex output of \"" ^ actual ^ "\"" >:: fun _ ->
+    let o1, e1 = lex ("\"" ^ actual ^ "\"") in
+    let o2, e2 = lex ("'" ^ actual ^ "'") in
+    if Error.has_error e1 || (Error.has_error e2 && Error.errors e2 <> [(0, CharTooBig)]) then
+      assert_failure "Lex failed"
+    else
+      assert_equal [(0, STRING expected)] o1 ~printer:(string_of_list show_point_token);
+      assert_equal [(0, CHAR (Bytes.of_string expected))] o2 ~printer:(string_of_list show_point_token)
+
 let op l n = (l, Lexer.OPERATOR n)
 
 let tests = "Lexer" >::: let open Error in [
@@ -52,6 +62,8 @@ let tests = "Lexer" >::: let open Error in [
   clean_lex [(0, NUMBER 17L)] "00000000000000000000000000000000021";
   clean_lex [(0, NUMBER (Int64.max_int))] "0777777777777777777777";
   lex_error [(0, OctalOutOfRange "01000000000000000000000")] "01000000000000000000000";
+  lex_error [(0, InvalidOctal)] "018";
+  lex_error [(0, InvalidOctal)] "0139";
   (* Operators *)
   clean_lex [op 0 "+"; op 2 "-"; op 4 "|"] "+ - |";
   clean_lex [op 0 "++"; op 3 "--"] "++ --";
@@ -65,4 +77,30 @@ let tests = "Lexer" >::: let open Error in [
   clean_lex [op 0 "=*"; op 3 "=/"; op 6 "=!="] "=* =/ =!=";
   clean_lex [op 0 "=%"; op 3 "=|"; op 6 "==="] "=% =| ===";
   clean_lex [op 0 "=^"; op 3 "=<"; op 6 "=>"] "=^ =< =>";
+  lex_error [(2, UnknownOperator "+--")] "x +-- 1";
+  (* String/char syntax *)
+  clean_lex [(0, STRING "Heyo")] "\"Heyo\"";
+  clean_lex [(0, STRING "Single 'quotes'")] "\"Single 'quotes'\"";
+  lex_error [(1, StringNotClosed)] " \"I NEED MORE";
+  lex_error [(0, StringNotClosed); (10, StringNotClosed)] "\"FAIL\nFAIL\"";
+  clean_lex [(0, CHAR (Bytes.of_string "\""))] "'\"'";
+  lex_error [(2, CharTooBig)] "  'aaaaaaaaa'  ";
+  lex_error [(3, CharNotClosed)] "   'I NEED MORE";
+  lex_error [(1, CharNotClosed); (12, CharNotClosed)] " 'Line\nBreak'";
+  (* String/char escaping *)
+  string_lex "A\x00B" "A*0B";
+  string_lex "{Brace}" "*(Brace*)";
+  string_lex "One\tTwo" "One*tTwo";
+  string_lex "Star*Power" "Star**Power";
+  string_lex "It's Fine" "It*'s Fine";
+  string_lex "Say \"Hello\"" "Say *\"Hello*\"";
+  string_lex "Line 1\nLine 2" "Line 1*nLine 2";
+  string_lex "End here -> \x04" "End here -> *e";
+  lex_error [(5, UnknownEscape "*l")] "'Esc *l'";
+  (* Unknown characters *)
+  lex_error [(2, UnknownToken '`')] "++`";
+  (* Comments *)
+  clean_lex [] "/** Dude \n COMMENTS HAVE NO TOKENS */";
+  clean_lex [(0, NUMBER 1L); (10, NUMBER 3L)] "1 /* 2 */ 3";
+  lex_error [(8, CommentNotClosed)] "auto x; /** Unclosed :("
 ]

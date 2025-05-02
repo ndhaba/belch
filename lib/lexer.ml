@@ -112,6 +112,7 @@ let int64_of_string_overflow radix =
 
     if start_idx >= len then (0L, true)  (* empty or sign-only string *)
     else loop start_idx 0L false
+[@@coverage off]
 
 let int64_of_octal = int64_of_string_overflow 8L
 let int64_of_decimal = int64_of_string_overflow 10L
@@ -158,41 +159,45 @@ let lex_text_data str i errs closure =
   let index = ref (i + 1) in
   (* Start parsing the string *)
   while !state = Incomplete && !index < slen do
-    match String.unsafe_get str !index with
-    (* Escape characters *)
-    | '*' when not !escape ->
-      escape := true
-    | '*' | '"' | '\'' as c when !escape ->
-      Buffer.add_char buffer c;
-      escape := false
-    | '0' when !escape ->
-      Buffer.add_char buffer '\x00';
-      escape := false
-    | '(' when !escape ->
-      Buffer.add_char buffer '{';
-      escape := false
-    | ')' when !escape ->
-      Buffer.add_char buffer '}';
-      escape := false
-    | 't' when !escape ->
-      Buffer.add_char buffer '\t';
-      escape := false
-    | 'n' when !escape ->
-      Buffer.add_char buffer '\n';
-      escape := false
-    (* Unknown escape character *)
-    | c when !escape ->
-      error errs (!index - 1) (UnknownEscape ("*" ^ String.make 1 c));
-      Buffer.add_char buffer c;
-      escape := false
-    (* Terminating characters *)
-    | c when c = closure ->
-      state := Valid
-    | '\n' ->
-      state := NotClosed
-    (* All other characters *)
-    | c ->
-      Buffer.add_char buffer c;
+    (* Handle each type of character *)
+    let _ = match String.unsafe_get str !index with
+      (* Escape characters *)
+      | '*' when not !escape ->
+        escape := true
+      | '*' | '"' | '\'' as c when !escape ->
+        Buffer.add_char buffer c;
+        escape := false
+      | '0' when !escape ->
+        Buffer.add_char buffer '\x00';
+        escape := false
+      | '(' when !escape ->
+        Buffer.add_char buffer '{';
+        escape := false
+      | ')' when !escape ->
+        Buffer.add_char buffer '}';
+        escape := false
+      | 't' when !escape ->
+        Buffer.add_char buffer '\t';
+        escape := false
+      | 'n' when !escape ->
+        Buffer.add_char buffer '\n';
+        escape := false
+      | 'e' when !escape ->
+        Buffer.add_char buffer '\x04';
+        escape := false
+      (* Unknown escape character *)
+      | c when !escape ->
+        error errs (!index - 1) (UnknownEscape ("*" ^ String.make 1 c));
+        Buffer.add_char buffer c;
+        escape := false
+      (* Terminating characters *)
+      | c when c = closure ->
+        state := Valid
+      | '\n' ->
+        state := NotClosed
+      (* All other characters *)
+      | c ->
+        Buffer.add_char buffer c in
     (* Increment the index *)
     index := !index + 1
   done;
@@ -304,6 +309,34 @@ let lex_name str i : point_token * int =
   in
   ((i, token), i + len)
 
+type comment_state = | None | Asterisk | Done
+
+let skip_comment str i errs =
+  let slen = String.length str in
+  let index = ref (i + 2) in
+  let state = ref None in
+  (* Find the break *)
+  while !index < slen && !state <> Done do
+    (* Handle the characters *)
+    let _ = match String.unsafe_get str !index with
+      | '*' ->
+        state := Asterisk
+      | '/' when !state = Asterisk ->
+        state := Done
+      | _ ->
+        state := None
+    in
+    (* Increment index *)
+    index := !index + 1
+  done;
+  (* Add an error if a break wasn't found *)
+  if !state = Done then
+    ()
+  else
+    error errs i (CommentNotClosed);
+  (* Return the final index *)
+  !index
+
 let lex str =
   let errs = new_error_state () in
   let slen = String.length str in
@@ -314,6 +347,9 @@ let lex str =
       match String.unsafe_get str i with
       (* Whitespace *)
       | ' ' | '\r' | '\t' | '\n' -> lex_raw (i + 1) acc
+      (* Comment *)
+      | '/' when slen > i + 1 && str.[i+1] = '*' ->
+        lex_raw (skip_comment str i errs) acc
       (* Symbols *)
       | '(' -> lex_raw (i + 1) ((i, LPAREN) :: acc)
       | ')' -> lex_raw (i + 1) ((i, RPAREN) :: acc)

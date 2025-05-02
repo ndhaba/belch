@@ -11,6 +11,7 @@ type error_variant =
 | UnknownToken of char
 | UnknownOperator of string
 | VarNumberStart
+| CommentNotClosed
 [@@deriving show]
 
 type error = int * error_variant
