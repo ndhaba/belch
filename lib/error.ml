@@ -1,17 +1,24 @@
 [@@@coverage off]
 
 type error_variant =
-| CharNotClosed
-| CharTooBig
-| DecimalOutOfRange of string
-| InvalidOctal
-| OctalOutOfRange of string
-| StringNotClosed
-| UnknownEscape of string
-| UnknownToken of char
-| UnknownOperator of string
-| VarNumberStart
-| CommentNotClosed
+  (* Lexer Errors *)
+  | CharNotClosed
+  | CharTooBig
+  | DecimalOutOfRange of string
+  | InvalidOctal
+  | OctalOutOfRange of string
+  | StringNotClosed
+  | UnknownEscape of string
+  | UnknownToken of char
+  | UnknownOperator of string
+  | VarNumberStart
+  | CommentNotClosed
+  (* Parser Errors *)
+  | ExpectedPrimaryValue
+  | UnclosedParentheses
+  | UnclosedBracket
+  | MissingVectorIndex
+  | EmptyFunctionArg
 [@@deriving show]
 
 type error = int * error_variant

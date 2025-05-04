@@ -32,36 +32,29 @@ type binary_operator =
   | BitwiseOR
 [@@deriving show]
 
-(** Represents a location/memory address in B *)
-type lvalue =
-  (* 4.1: Primary expressions *)
-  | NameLoc of string
-  | VectorAccess of rvalue * rvalue
-  (* 4.2: Unary operators *)
-  | Indirection of rvalue
-[@@deriving show]
-
 (** Represents a value in B *)
-and rvalue =
+and value =
   (* 4.1: Primary expressions *)
-  | NameVal of string
+  | Name of string
+  | VectorAccess of value * value
   | Constant of int64
   | Char of bytes
   | String of string
-  | FunctionCall of rvalue * rvalue list
+  | FunctionCall of value * value list
   (* 4.2: Unary operations *)
-  | Address of lvalue
-  | Negate of rvalue
-  | LogicalNot of rvalue
-  | Increment of lvalue * unary_op_position
-  | Decrement of lvalue * unary_op_position
-  | BitwiseNot of rvalue
+  | Indirection of value
+  | Address of value
+  | Negate of value
+  | LogicalNot of value
+  | Increment of value * unary_op_position
+  | Decrement of value * unary_op_position
+  | BitwiseNot of value
   (* 4.3-4.10: Binary operations *)
-  | BinaryOperation of rvalue * binary_operator * rvalue
+  | BinaryOperation of value * binary_operator * value
   (* 4.11: Conditional expression *)
-  | Ternary of rvalue * rvalue * rvalue
+  | Ternary of value * value * value
   (* 4.12: Assignment operations *)
-  | AssignmentOperation of lvalue * binary_operator option * rvalue
+  | AssignmentOperation of value * binary_operator option * value
 [@@deriving show]
 
 (** Represents an imperative statement in B *)
@@ -69,20 +62,20 @@ type statement =
   (* 5.1: Compound statement *)
   | Compound of statement list
   (* 5.2: Conditional statement*)
-  | If of rvalue * statement
-  | IfElse of rvalue * statement * statement
+  | If of value * statement
+  | IfElse of value * statement * statement
   (* 5.3: While statement *)
-  | While of rvalue * statement
+  | While of value * statement
   (* 5.4: Switch statement *)
-  | Switch of rvalue * (rvalue option * statement) list
+  | Switch of value * (value option * statement) list
   (* 5.5: Goto statement *)
-  | Goto of rvalue
+  | Goto of value
   (* 5.6: Break statement *)
   | Break
   (* 5.7: Return statement *)
-  | Return of rvalue option
+  | Return of value option
   (* 5.8: Rvalue statement *)
-  | RValue of rvalue
+  | RValue of value
   (* 5.9: Null statement *)
   | Null
   (* 6: External and auto declarations *)
@@ -94,8 +87,8 @@ type statement =
 (** Represents a top-level definition in B *)
 type definition =
   (* 7: Definitions *)
-  | ValueDef of string * rvalue option
-  | VectorDef of string * int option * rvalue list option
+  | ValueDef of string * value option
+  | VectorDef of string * int option * value list option
   | FunctionDef of string * string list * statement
 [@@deriving show]
 
