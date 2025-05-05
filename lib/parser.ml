@@ -82,6 +82,47 @@ and parse_primary_value tokens state =
   (* Do the thing *)
   in main_loop (parse_primary_value_inner tokens state)
 
-and parse_unary_expression tokens state = Obj.magic ()
+and parse_unary_expression tokens state = 
+  match tokens with
+    (* Indirection *)
+    | (_, OPERATOR "*") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      Indirection (inner), tokens
+    (* Address *)
+    | (_, OPERATOR "&") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      Address (inner), tokens
+    (* Negate *)
+    | (_, OPERATOR "-") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      Negate (inner), tokens
+    (* Logical NOT *)
+    | (_, OPERATOR "!") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      LogicalNot (inner), tokens
+    (* Increment *)
+    | (_, OPERATOR "++") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      Increment (inner, Prefix), tokens
+    (* Decrement *)
+    | (_, OPERATOR "--") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      Decrement (inner, Prefix), tokens
+    (* Bitwise NOT *)
+    | (_, OPERATOR "~") :: tokens ->
+      let inner, tokens = parse_unary_expression tokens state in
+      BitwiseNot (inner), tokens
+    (* Postfixes *)
+    | tokens ->
+      let inner, tokens = parse_primary_value tokens state in
+      match tokens with
+        (* Increment *)
+        | (_, OPERATOR "++") :: tokens ->
+          Increment (inner, Postfix), tokens
+        (* Decrement *)
+        | (_, OPERATOR "--") :: tokens ->
+          Decrement (inner, Postfix), tokens
+        (* Anything else *)
+        | tokens -> inner, tokens
 
 and parse_value tokens state = Obj.magic ()

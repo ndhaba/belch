@@ -65,19 +65,18 @@ let tests = "Lexer" >::: let open Error in [
   lex_error [(0, InvalidOctal)] "018";
   lex_error [(0, InvalidOctal)] "0139";
   (* Operators *)
-  clean_lex [op 0 "+"; op 2 "-"; op 4 "|"] "+ - |";
-  clean_lex [op 0 "++"; op 3 "--"] "++ --";
-  clean_lex [op 0 "*"; op 2 "/"; op 4 "^"] "* / ^";
-  clean_lex [op 0 "&"; op 2 "!"; op 4 "~"] "& ! ~";
-  clean_lex [op 0 "%"; op 2 "<"; op 4 ">"] "% < >";
-  clean_lex [op 0 "<="; op 3 ">="] "<= >=";
-  clean_lex [op 0 "<<"; op 3 ">>"; op 6 "=<<"; op 10 "=>>"] "<< >> =<< =>>";
+  clean_lex [op 0 "+"; op 1 "-"; op 2 "|"] "+-|";
+  clean_lex [op 0 "++"; op 2 "--"] "++--";
+  clean_lex [op 0 "*"; op 1 "/"; op 2 "^"] "*/^";
+  clean_lex [op 0 "&"; op 1 "!"; op 2 "~"] "&!~";
+  clean_lex [op 0 "%"; op 1 "<"; op 2 ">"] "%<>";
+  clean_lex [op 0 "<="; op 2 ">="] "<=>=";
+  clean_lex [op 0 "<<"; op 2 ">>"; op 4 "=<<"; op 7 "=>>"] "<<>>=<<=>>";
   clean_lex [op 0 "=="; op 3 "!="; op 6 "=<="] "== != =<=";
-  clean_lex [op 0 "=+"; op 3 "=-"; op 6 "=>="] "=+ =- =>=";
-  clean_lex [op 0 "=*"; op 3 "=/"; op 6 "=!="] "=* =/ =!=";
-  clean_lex [op 0 "=%"; op 3 "=|"; op 6 "==="] "=% =| ===";
-  clean_lex [op 0 "=^"; op 3 "=<"; op 6 "=>"] "=^ =< =>";
-  lex_error [(2, UnknownOperator "+--")] "x +-- 1";
+  clean_lex [op 0 "=+"; op 2 "=-"; op 4 "=>="] "=+=-=>=";
+  clean_lex [op 0 "=*"; op 2 "=/"; op 4 "=!="] "=*=/=!=";
+  clean_lex [op 0 "=%"; op 2 "=|"; op 4 "==="] "=%=|===";
+  clean_lex [op 0 "=^"; op 2 "=<"; op 5 "=>"] "=^=< =>";
   (* String/char syntax *)
   clean_lex [(0, STRING "Heyo")] "\"Heyo\"";
   clean_lex [(0, STRING "Single 'quotes'")] "\"Single 'quotes'\"";

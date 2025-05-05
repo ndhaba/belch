@@ -10,7 +10,6 @@ type error_variant =
   | StringNotClosed
   | UnknownEscape of string
   | UnknownToken of char
-  | UnknownOperator of string
   | VarNumberStart
   | CommentNotClosed
   (* Parser Errors *)

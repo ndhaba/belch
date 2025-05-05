@@ -62,19 +62,6 @@ let is_operator_char = function
   | '^' -> true
   | _ -> false
 
-(* [is_operator s] is true if [s] is a valid operator *)
-let is_operator =
-  (* List of every single possible operator *)
-  let operators = [
-    "*"; "&"; "-"; "!"; "++"; "--"; "~"; "/"; "%"; "+";
-    "<<"; ">>"; "<"; "<="; ">"; ">="; "=="; "!="; "^";
-    "|"; "=*"; "=/"; "=%"; "=+"; "=-"; "=<<"; "=>>";
-    "=<"; "=<="; "=>"; "=>="; "==="; "=!="; "=&"; "=^";
-    "=|"
-  ]
-  (* Check if [s] is in the list *)
-  in fun s -> List.mem s operators
-
 let int_zero_char = int_of_char '0'
 
 (** [int64_of_string_overflow radix s] parses a string as an [Int64] in base-[radix].
@@ -131,19 +118,33 @@ let length_while f str i =
   in
   aux i i
 
+let multichar_operators = [
+  "=>="; "==="; "=!="; "=<="; "=<<"; "=>>";
+  "=<"; "=>"; "=&"; "=^"; "=*"; "=/"; "=%"; "=+"; "++";
+  "=-"; "=|"; "<<"; ">>"; "=="; "!="; ">="; "<="; "--"
+]
+
+let string_starts_with str i part =
+  let slen = String.length str in
+  let plen = String.length part in
+  if slen - i < plen then
+    false
+  else
+    let rec driver j =
+      if j >= plen then
+        true
+      else if str.[i+j] <> part.[j] then
+        false
+      else
+        driver (j + 1)
+    in driver 0
+
 (** [lex_operator str i errs] lexes the current position in [str] as an
     operator. If this operator is unknown, an error will be added to [errs] *)
 let lex_operator str i errs =
-  (* Get the full operator *)
-  let len = length_while is_operator_char str i in
-  let operator = String.sub str i len in
-  (* If the operator is unknown, add an error but continue execution *)
-  if is_operator operator then
-    ()
-  else
-    error errs i (UnknownOperator operator);
-  (* Return the token *)
-  ((i, OPERATOR operator), i + len)
+  match List.find_opt (string_starts_with str i) multichar_operators with
+    | Some op -> ((i, OPERATOR op), i + (String.length op))
+    | None -> ((i, OPERATOR (String.sub str i 1)), i + 1)  
 
 (* A type representing the state of [lex_text_data] *)
 type text_state = Valid | NotClosed | Incomplete
