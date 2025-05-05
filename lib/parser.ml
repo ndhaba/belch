@@ -82,35 +82,35 @@ and parse_primary_value tokens state =
   (* Do the thing *)
   in main_loop (parse_primary_value_inner tokens state)
 
-and parse_unary_expression tokens state = 
+and parse_unary_expr tokens state = 
   match tokens with
     (* Indirection *)
     | (_, OPERATOR "*") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       Indirection (inner), tokens
     (* Address *)
     | (_, OPERATOR "&") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       Address (inner), tokens
     (* Negate *)
     | (_, OPERATOR "-") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       Negate (inner), tokens
     (* Logical NOT *)
     | (_, OPERATOR "!") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       LogicalNot (inner), tokens
     (* Increment *)
     | (_, OPERATOR "++") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       Increment (inner, Prefix), tokens
     (* Decrement *)
     | (_, OPERATOR "--") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       Decrement (inner, Prefix), tokens
     (* Bitwise NOT *)
     | (_, OPERATOR "~") :: tokens ->
-      let inner, tokens = parse_unary_expression tokens state in
+      let inner, tokens = parse_unary_expr tokens state in
       BitwiseNot (inner), tokens
     (* Postfixes *)
     | tokens ->
@@ -124,5 +124,141 @@ and parse_unary_expression tokens state =
           Decrement (inner, Postfix), tokens
         (* Anything else *)
         | tokens -> inner, tokens
+
+and parse_binary_expr_mult tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* Multiply *)
+      | (_, OPERATOR "*") :: tokens ->
+        let right, tokens = parse_unary_expr tokens state in
+        loop (BinaryOperation (left, Multiply, right)) tokens
+      (* Divide *)
+      | (_, OPERATOR "/") :: tokens ->
+        let right, tokens = parse_unary_expr tokens state in
+        loop (BinaryOperation (left, Divide, right)) tokens
+      (* Modulo *)
+      | (_, OPERATOR "%") :: tokens ->
+        let right, tokens = parse_unary_expr tokens state in
+        loop (BinaryOperation (left, Modulo, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_unary_expr tokens state in
+  loop left tokens
+
+and parse_binary_expr_add tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* Add *)
+      | (_, OPERATOR "+") :: tokens ->
+        let right, tokens = parse_binary_expr_mult tokens state in
+        loop (BinaryOperation (left, Add, right)) tokens
+      (* Subtract *)
+      | (_, OPERATOR "-") :: tokens ->
+        let right, tokens = parse_binary_expr_mult tokens state in
+        loop (BinaryOperation (left, Subtract, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_mult tokens state in
+  loop left tokens
+
+and parse_binary_expr_shift tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* Left Shift *)
+      | (_, OPERATOR "<<") :: tokens ->
+        let right, tokens = parse_binary_expr_add tokens state in
+        loop (BinaryOperation (left, LeftShift, right)) tokens
+      (* Right Shift *)
+      | (_, OPERATOR ">>") :: tokens ->
+        let right, tokens = parse_binary_expr_add tokens state in
+        loop (BinaryOperation (left, RightShift, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_add tokens state in
+  loop left tokens
+
+and parse_binary_expr_rel tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* Less Than *)
+      | (_, OPERATOR "<") :: tokens ->
+        let right, tokens = parse_binary_expr_shift tokens state in
+        loop (BinaryOperation (left, LessThan, right)) tokens
+      (* Less Than or Equal *)
+      | (_, OPERATOR "<=") :: tokens ->
+        let right, tokens = parse_binary_expr_shift tokens state in
+        loop (BinaryOperation (left, LessEqual, right)) tokens
+      (* Greater Than *)
+      | (_, OPERATOR ">") :: tokens ->
+        let right, tokens = parse_binary_expr_shift tokens state in
+        loop (BinaryOperation (left, GreaterThan, right)) tokens
+      (* Greater Than or Equal *)
+      | (_, OPERATOR ">=") :: tokens ->
+        let right, tokens = parse_binary_expr_shift tokens state in
+        loop (BinaryOperation (left, GreaterEqual, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_shift tokens state in
+  loop left tokens
+
+and parse_binary_expr_eq tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* Equal *)
+      | (_, OPERATOR "==") :: tokens ->
+        let right, tokens = parse_binary_expr_rel tokens state in
+        loop (BinaryOperation (left, Equal, right)) tokens
+      (* Not Equal *)
+      | (_, OPERATOR "!=") :: tokens ->
+        let right, tokens = parse_binary_expr_rel tokens state in
+        loop (BinaryOperation (left, NotEqual, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_rel tokens state in
+  loop left tokens
+
+and parse_binary_expr_and tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* AND *)
+      | (_, OPERATOR "&") :: tokens ->
+        let right, tokens = parse_binary_expr_eq tokens state in
+        loop (BinaryOperation (left, BitwiseAND, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_eq tokens state in
+  loop left tokens
+
+and parse_binary_expr_xor tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* XOR *)
+      | (_, OPERATOR "^") :: tokens ->
+        let right, tokens = parse_binary_expr_and tokens state in
+        loop (BinaryOperation (left, BitwiseXOR, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_and tokens state in
+  loop left tokens
+
+and parse_binary_expr tokens state =
+  let rec loop left tokens =
+    match tokens with
+      (* OR *)
+      | (_, OPERATOR "|") :: tokens ->
+        let right, tokens = parse_binary_expr_xor tokens state in
+        loop (BinaryOperation (left, BitwiseOR, right)) tokens
+      (* Anything else*)
+      | tokens -> left, tokens in
+  (* Start loop *)
+  let left, tokens = parse_binary_expr_xor tokens state in
+  loop left tokens
 
 and parse_value tokens state = Obj.magic ()
