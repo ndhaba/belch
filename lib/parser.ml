@@ -261,4 +261,59 @@ and parse_binary_expr tokens state =
   let left, tokens = parse_binary_expr_xor tokens state in
   loop left tokens
 
-and parse_value tokens state = Obj.magic ()
+and parse_ternary_expr tokens state =
+  let left, tokens = parse_binary_expr tokens state in
+  match tokens with
+    (* The most important symbol is the question mark *)
+    | (_, QUESTION) :: tokens -> (
+      (* Parse the first result *)
+      let middle, tokens = parse_binary_expr tokens state in
+      let tokens = match tokens with
+        (* We expect a colon to be there *)
+        | (_, COLON) :: tokens -> tokens
+        (* If the next token isn't a colon *)
+        | (i, _) :: tokens -> (
+          error state i MissingColon;
+          tokens
+        )
+        (* If there is no next colon *)
+        | [] -> (
+          error state Int.max_int MissingColon;
+          tokens
+        )
+      (* Parse the second result *)
+      in let right, tokens = parse_ternary_expr tokens state in
+      Ternary (left, middle, right), tokens
+    )
+    (* For any other symbol, it's not a ternary *)
+    | tokens -> left, tokens
+
+and parse_value tokens state =
+  (* Parse the left side *)
+  let left, tokens = parse_ternary_expr tokens state in
+  (* Try to find the operation being represented *)
+  let operator, tokens = match tokens with
+    | (_, OPERATOR "=") :: tokens -> Some (None), tokens
+    | (_, OPERATOR "=+") :: tokens -> Some (Some Add), tokens
+    | (_, OPERATOR "=-") :: tokens -> Some (Some Subtract), tokens
+    | (_, OPERATOR "=*") :: tokens -> Some (Some Multiply), tokens
+    | (_, OPERATOR "=/") :: tokens -> Some (Some Divide), tokens
+    | (_, OPERATOR "=%") :: tokens -> Some (Some Modulo), tokens
+    | (_, OPERATOR "=<<") :: tokens -> Some (Some LeftShift), tokens
+    | (_, OPERATOR "=>>") :: tokens -> Some (Some RightShift), tokens
+    | (_, OPERATOR "=<") :: tokens -> Some (Some LessThan), tokens
+    | (_, OPERATOR "=<=") :: tokens -> Some (Some LessEqual), tokens
+    | (_, OPERATOR "=>") :: tokens -> Some (Some GreaterThan), tokens
+    | (_, OPERATOR "=>=") :: tokens -> Some (Some GreaterEqual), tokens
+    | (_, OPERATOR "===") :: tokens -> Some (Some Equal), tokens
+    | (_, OPERATOR "=!=") :: tokens -> Some (Some NotEqual), tokens
+    | (_, OPERATOR "=&") :: tokens -> Some (Some BitwiseAND), tokens
+    | (_, OPERATOR "=^") :: tokens -> Some (Some BitwiseXOR), tokens
+    | (_, OPERATOR "=|") :: tokens -> Some (Some BitwiseOR), tokens
+    | tokens -> None, tokens in
+  (* Handle the result *)
+  match operator with
+    | None -> left, tokens
+    | Some op ->
+      let right, tokens = parse_value tokens state in
+      AssignmentOperation (left, op, right), tokens

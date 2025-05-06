@@ -18,6 +18,7 @@ type error_variant =
   | UnclosedBracket
   | MissingVectorIndex
   | EmptyFunctionArg
+  | MissingColon
 [@@deriving show]
 
 type error = int * error_variant
